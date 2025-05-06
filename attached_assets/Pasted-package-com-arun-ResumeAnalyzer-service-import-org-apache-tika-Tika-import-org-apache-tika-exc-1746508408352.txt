@@ -1,0 +1,106 @@
+package com.arun.ResumeAnalyzer.service;
+
+import org.apache.tika.Tika;
+import org.apache.tika.exception.TikaException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.arun.ResumeAnalyzer.Entity.Resume;
+import com.arun.ResumeAnalyzer.dao.ResumeDAO;
+
+import java.io.IOException;
+import java.util.*;
+
+@Service
+public class ResumeService {
+
+    @Autowired
+    private ResumeDAO resumeRepository;
+
+    public Map<String, String> processFile(MultipartFile file) throws IOException, TikaException {
+        String resumeText = extractTextFromFile(file);
+        System.out.println("Extracted Resume Text:\n" + resumeText); // Log output
+
+        Map<String, String> parsedData = parseResumeData(resumeText);
+        saveResumeData(parsedData);
+
+        return parsedData;
+    }
+
+    private String extractTextFromFile(MultipartFile file) throws IOException, TikaException {
+        Tika tika = new Tika();
+        return tika.parseToString(file.getInputStream());
+    }
+
+    private Map<String, String> parseResumeData(String resumeText) {
+        Map<String, String> data = new HashMap<>();
+        String[] lines = resumeText.split("\\r?\\n");
+
+        String currentSection = null;
+        StringBuilder sectionContent = new StringBuilder();
+        Map<String, StringBuilder> sections = new HashMap<>();
+
+        // Define flexible section headers
+        Map<String, List<String>> sectionKeywords = Map.of(
+                "Summary", List.of("summary", "profile", "objective"),
+                "Education", List.of("education", "academic", "qualifications"),
+                "Experience", List.of("experience", "work", "employment", "career"),
+                "Personal Information", List.of("contact", "personal", "details")
+        );
+
+        for (String line : lines) {
+            String lowerLine = line.trim().toLowerCase();
+
+            boolean matched = false;
+            for (Map.Entry<String, List<String>> entry : sectionKeywords.entrySet()) {
+                for (String keyword : entry.getValue()) {
+                    if (lowerLine.startsWith(keyword)) {
+                        if (currentSection != null && sectionContent.length() > 0) {
+                            sections.put(currentSection, new StringBuilder(sectionContent));
+                        }
+                        currentSection = entry.getKey();
+                        sectionContent.setLength(0); // reset
+                        matched = true;
+                        break;
+                    }
+                }
+                if (matched) break;
+            }
+
+            if (currentSection != null && !matched) {
+                sectionContent.append(line).append("\n");
+            }
+        }
+
+        if (currentSection != null && sectionContent.length() > 0) {
+            sections.put(currentSection, sectionContent);
+        }
+
+        for (String section : sectionKeywords.keySet()) {
+            StringBuilder content = sections.getOrDefault(section, new StringBuilder("Not found"));
+            data.put(section, content.toString().trim());
+        }
+
+        return data;
+    }
+
+    private void saveResumeData(Map<String, String> parsedData) {
+        Resume resume = new Resume();
+        resume.setSummary(parsedData.get("Summary"));
+        resume.setEducation(parsedData.get("Education"));
+        resume.setExperience(parsedData.get("Experience"));
+        resume.setPersonalInformation(parsedData.get("Personal Information"));
+        resumeRepository.save(resume);
+    }
+    
+    // ✅ Get all resumes from the database
+    public List<Resume> getAllResumes() {
+        return resumeRepository.findAll();
+    }
+
+    public Optional<Resume> getResumeById(Long id) {
+        return resumeRepository.findById(id); // returns Optional<Resume>
+    }
+
+}
