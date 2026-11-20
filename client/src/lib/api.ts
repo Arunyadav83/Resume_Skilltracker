@@ -1,5 +1,6 @@
 import { Resume } from "@/types/resume";
 
+
 // Function to upload resume file
 export async function uploadResume(file: File): Promise<Record<string, string>> {
   const formData = new FormData();
@@ -43,4 +44,5 @@ export async function getResumeById(id: number): Promise<Resume> {
   }
 
   return response.json();
+
 }

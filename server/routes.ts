@@ -4,6 +4,8 @@ import multer from "multer";
 import { db } from "@db";
 import { resumes } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import pdf from "pdf-parse/lib/pdf-parse.js";
+import mammoth from "mammoth";
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
@@ -29,28 +31,41 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // API routes with /api prefix
   const apiPrefix = '/api';
 
-  // Route to upload and process a resume
   app.post(`${apiPrefix}/resume/upload`, upload.single('file'), async (req: Request, res: Response) => {
     try {
-      if (!req.file) {
+      const file = (req as any).file;
+      if (!file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      // For this implementation, we'll mock the resume parsing since we don't have Apache Tika
-      // This simulates what the Java service would do
-      const fileContent = req.file.buffer.toString();
-      const sections = extractResumeData(fileContent);
+      let fileText = "";
+      
+      if (file.mimetype === 'application/pdf') {
+        const pdfData = await pdf(file.buffer);
+        fileText = pdfData.text;
+      } else if (
+        file.mimetype === 'application/msword' || 
+        file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ) {
+        const docxData = await mammoth.extractRawText({ buffer: file.buffer });
+        fileText = docxData.value;
+      } else {
+        fileText = file.buffer.toString();
+      }
+
+      const sections = extractResumeData(fileText);
+      console.log('Extracted Text Preview:', fileText.substring(0, 500)); // Log first 500 chars for debugging
+      console.log('Parsed Sections:', sections);
       
       // Save to database
-      const [newResume] = await db.insert(resumes).values({
+      await db.insert(resumes).values({
         summary: sections.Summary || '',
         education: sections.Education || '',
         experience: sections.Experience || '',
         personalInformation: sections['Personal Information'] || ''
-      }).returning();
+      });
       
       return res.status(200).json(sections);
     } catch (error) {
@@ -97,61 +112,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Route to delete a resume by ID
+  app.delete(`${apiPrefix}/resume/:id`, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid ID parameter' });
+      }
+      
+      const result = await db.delete(resumes).where(eq(resumes.id, id));
+      
+      return res.status(200).json({ message: 'Resume deleted successfully', id });
+    } catch (error) {
+      console.error('Error deleting resume:', error);
+      return res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Error deleting resume' 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
 
-// Helper function to extract resume data (simulates the Java service's functionality)
 function extractResumeData(text: string): Record<string, string> {
-  const data: Record<string, string> = {};
-  const lines = text.split(/\r?\n/);
-  
-  let currentSection: string | null = null;
-  let sectionContent: string[] = [];
-  const sections: Record<string, string[]> = {};
-  
-  // Define section keywords similar to the Java backend
-  const sectionKeywords: Record<string, string[]> = {
-    'Summary': ['summary', 'profile', 'objective'],
-    'Education': ['education', 'academic', 'qualifications'],
-    'Experience': ['experience', 'work', 'employment', 'career'],
-    'Personal Information': ['contact', 'personal', 'details']
+  const data: Record<string, string> = {
+    'Summary': 'Not found',
+    'Education': 'Not found',
+    'Experience': 'Not found',
+    'Personal Information': 'Not found'
   };
-  
-  // Parse the content into sections
+
+  const sectionKeywords: Record<string, string[]> = {
+    'Summary': ['summary', 'profile', 'objective', 'about me'],
+    'Education': ['education', 'academic', 'qualification', 'schooling', 'university'],
+    'Experience': ['experience', 'work', 'employment', 'career', 'history', 'projects'],
+    'Personal Information': ['personal', 'contact', 'details', 'address', 'phone', 'email']
+  };
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  let currentSection: string | null = null;
+  const sections: Record<string, string[]> = {};
+
   for (const line of lines) {
-    const lowerLine = line.trim().toLowerCase();
-    
-    let matched = false;
+    const lowerLine = line.toLowerCase();
+    let foundNewSection = false;
+
     for (const [section, keywords] of Object.entries(sectionKeywords)) {
-      for (const keyword of keywords) {
-        if (lowerLine.startsWith(keyword)) {
-          if (currentSection && sectionContent.length > 0) {
-            sections[currentSection] = [...sectionContent];
-          }
-          currentSection = section;
-          sectionContent = [];
-          matched = true;
-          break;
-        }
+      // Check if line contains keyword and is short (likely a header)
+      if (keywords.some(k => lowerLine.includes(k) && lowerLine.length < k.length + 10)) {
+        currentSection = section;
+        foundNewSection = true;
+        if (!sections[currentSection]) sections[currentSection] = [];
+        break;
       }
-      if (matched) break;
     }
-    
-    if (currentSection && !matched) {
-      sectionContent.push(line);
+
+    if (currentSection && !foundNewSection) {
+      sections[currentSection].push(line);
     }
   }
-  
-  // Add the last section
-  if (currentSection && sectionContent.length > 0) {
-    sections[currentSection] = [...sectionContent];
+
+  for (const [section, content] of Object.entries(sections)) {
+    if (content.length > 0) {
+      data[section] = content.join('\n');
+    }
   }
-  
-  // Convert to final format
-  for (const section of Object.keys(sectionKeywords)) {
-    data[section] = (sections[section] || ['Not found']).join('\n').trim();
-  }
-  
+
   return data;
 }

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Download, FileText, User, BriefcaseIcon, GraduationCap, Loader2 } from "lucide-react";
 import { Resume } from "@/types/resume";
 import { ResumeSection } from "./ResumeSection";
+import RecentResumes from "@/components/RecentResumes";
 
 interface ResumeDetailsProps {
   resume: Resume | null;
@@ -13,6 +14,17 @@ interface ResumeDetailsProps {
 
 export function ResumeDetails({ resume, isLoading }: ResumeDetailsProps) {
   const [activeTab, setActiveTab] = useState("overview");
+  const [openSections, setOpenSections] = useState({
+    personalInfo: false,
+    summary: false,
+    experience: false,
+    education: false,
+    skills:false
+  });
+
+  const toggleSection = (section: string) => {
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
 
   const handleExport = () => {
     if (!resume) return;
@@ -96,29 +108,60 @@ ${resume.education || "N/A"}
           </TabsList>
           
           <TabsContent value="overview" className="space-y-6">
-            <ResumeSection 
-              title="Personal Information"
-              icon={<User className="h-5 w-5 text-gray-500" />}
-              content={resume?.personalInformation || "Not available"}
-            />
+            <div onClick={() => toggleSection('personalInfo')} className="cursor-pointer">
+              <h3 className="font-bold">Personal Information</h3>
+            </div>
+            {openSections.personalInfo && (
+              <ResumeSection 
+                title="Personal Information"
+                icon={<User className="h-5 w-5 text-gray-500" />}
+                content={resume?.personalInformation || "Not available"}
+              />
+            )}
             
-            <ResumeSection 
-              title="Professional Summary"
-              icon={<FileText className="h-5 w-5 text-gray-500" />}
-              content={resume?.summary || "Not available"}
-            />
+            <div onClick={() => toggleSection('summary')} className="cursor-pointer">
+              <h3 className="font-bold">Professional Summary</h3>
+            </div>
+            {openSections.summary && (
+              <ResumeSection 
+                title="Professional Summary"
+                icon={<FileText className="h-5 w-5 text-gray-500" />}
+                content={resume?.summary || "Not available"}
+              />
+            )}
             
-            <ResumeSection 
-              title="Work Experience"
-              icon={<BriefcaseIcon className="h-5 w-5 text-gray-500" />}
-              content={resume?.experience || "Not available"}
-            />
+            <div onClick={() => toggleSection('experience')} className="cursor-pointer">
+              <h3 className="font-bold">Work Experience</h3>
+            </div>
+            {openSections.experience && (
+              <ResumeSection 
+                title="Work Experience"
+                icon={<BriefcaseIcon className="h-5 w-5 text-gray-500" />}
+                content={resume?.experience || "Not available"}
+              />
+            )}
             
-            <ResumeSection 
-              title="Education"
-              icon={<GraduationCap className="h-5 w-5 text-gray-500" />}
-              content={resume?.education || "Not available"}
-            />
+            <div onClick={() => toggleSection('education')} className="cursor-pointer">
+              <h3 className="font-bold">Education</h3>
+            </div>
+            {openSections.education && (
+              <ResumeSection 
+                title="Education"
+                icon={<GraduationCap className="h-5 w-5 text-gray-500" />}
+                content={resume?.education || "Not available"}
+              />
+            )}
+           <div onClick={() => toggleSection('skills')} className="cursor-pointer">
+  <h3 className="font-bold">Skills</h3>
+</div>
+{openSections.skills && (
+  <ResumeSection 
+    title="Skills"
+    icon={<User className="h-5 w-5 text-gray-500" />}
+    content={resume?.skills || "Not available"}
+  />
+)}
+
           </TabsContent>
           
           <TabsContent value="raw">

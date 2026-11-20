@@ -1,7 +1,7 @@
 export interface Resume {
-  id: number;
-  summary: string;
-  education: string;
-  experience: string;
-  personalInformation: string;
+  personalInformation?: string;
+  summary?: string;
+  experience?: string;
+  education?: string;
+  skills?: string; // 👈 Add this line
 }

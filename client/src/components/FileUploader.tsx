@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 interface FileUploaderProps {
   onFileUpload: (file: File) => Promise<void>;
   isProcessing: boolean;
+  onUploadSuccess: () => void; 
 }
 
 export function FileUploader({ onFileUpload, isProcessing }: FileUploaderProps) {
@@ -61,22 +62,16 @@ export function FileUploader({ onFileUpload, isProcessing }: FileUploaderProps) 
       setError('Please select a file to upload');
       return;
     }
-    
+  
     try {
       await onFileUpload(file);
-      toast({
-        title: "File uploaded successfully",
-        description: "Your resume is being analyzed",
-      });
-    } catch (err) {
-      console.error("Error uploading file:", err);
-      toast({
-        variant: "destructive",
-        title: "Upload failed",
-        description: "There was an error uploading your file. Please try again.",
-      });
+      setFile(null); // Clear the file after upload
+    } catch (uploadError) {
+      console.error("Upload failed:", uploadError);
+      setError('File upload failed. Please try again.');
     }
   };
+  
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return bytes + ' B';
